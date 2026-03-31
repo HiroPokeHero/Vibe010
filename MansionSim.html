@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mansion Tycoon</title>
+    <script>window.process = { env: { NODE_ENV: 'production' } };</script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide-react@0.344.0/dist/umd/lucide-react.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        :root {
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            margin: 0;
+            padding: 0;
+            background-color: #020617; /* slate-950 */
+            color: #e2e8f0; /* slate-200 */
+        }
+
+        .font-mono {
+            font-family: var(--font-mono);
+        }
+
+        /* Custom scrollbar for logs */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+    </style>
+    
+    <script>
+        // Tailwind Configuration
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Ensure process.env.NODE_ENV is defined for some libraries
+        window.process = window.process || { env: { NODE_ENV: 'production' } };
+
+        const { useState, useEffect, useRef, useMemo } = React;
+        
+        // Extremely robust component extraction
+        const getGlobal = (paths) => {
+            for (const path of paths) {
+                const parts = path.split('.');
+                let curr = window;
+                for (const part of parts) {
+                    curr = curr ? curr[part] : undefined;
+                }
+                if (curr) return curr;
+            }
+            return {};
+        };
+
+        const Lucide = getGlobal(['LucideReact', 'lucide']);
+        const getIcon = (name) => {
+            const Icon = Lucide[name];
+            if (Icon) return Icon;
+            // Fallback to a simple SVG or text if icon is missing
+            return (props) => (
+                <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="8" fill="currentColor" stroke="none">{name.substring(0, 2)}</text>
+                </svg>
+            );
+        };
+
+        const Building = getIcon('Building');
+        const Users = getIcon('Users');
+        const DollarSign = getIcon('DollarSign');
+        const Wrench = getIcon('Wrench');
+        const Sparkles = getIcon('Sparkles');
+        const Megaphone = getIcon('Megaphone');
+        const Play = getIcon('Play');
+        const Pause = getIcon('Pause');
+        const TrendingUp = getIcon('TrendingUp');
+        const Info = getIcon('Info');
+        const LayoutDashboard = getIcon('LayoutDashboard');
+        const Eye = getIcon('Eye');
+        const X = getIcon('X');
+        const BedDouble = getIcon('BedDouble');
+        const Utensils = getIcon('Utensils');
+        const Tv = getIcon('Tv');
+        const Bath = getIcon('Bath');
+        const Cloud = getIcon('Cloud');
+        const Moon = getIcon('Moon');
+
+        // Framer Motion detection
+        const Framer = getGlobal(['Motion', 'FramerMotion', 'framerMotion']);
+        const motion = Framer.motion || {
+            div: (props) => <div {...props} />,
+            button: (props) => <button {...props} />,
+            span: (props) => <span {...props} />,
+            header: (props) => <header {...props} />,
+            main: (props) => <main {...props} />,
+            section: (props) => <section {...props} />
+        };
+        const AnimatePresence = Framer.AnimatePresence || (({ children }) => <>{children}</>);
+
+        // --- Types & Constants ---
+        const CLEANING_COSTS = {
+            none: 0,
+            basic: 20000,
+            premium: 50000,
+        };
+
+        const CLEANING_NAMES = {
+            none: 'なし',
+            basic: '標準清掃',
+            premium: 'プレミアム清掃',
+        };
+
+        const INITIAL_STATE = {
+            month: 1,
+            money: 1000000,
+            rooms: 12,
+            residents: 3,
+            rent: 60000,
+            facilityLevel: 1,
+            cleaningLevel: 'basic',
+            isPaused: true,
+            logs: [{ id: 'init', text: 'マンション経営を開始しました。', type: 'info' }],
+            adActive: false,
+        };
+
+        const FACILITY_UPGRADE_BASE_COST = 500000;
+        const AD_COST = 100000;
+        const RENT_INCREASE_PER_LEVEL = 5000;
+        const MAINTENANCE_COST_PER_LEVEL = 10000;
+
+        // --- Helper Functions ---
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
+        };
+
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        // --- Components ---
+
+        function RoomModal({ roomNumber, onClose }) {
+            const WAYPOINTS = [
+                { x: 25, y: 25 }, { x: 75, y: 25 }, { x: 30, y: 75 }, { x: 75, y: 75 }, { x: 50, y: 50 }
+            ];
+            const [posIndex, setPosIndex] = useState(0);
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setPosIndex(Math.floor(Math.random() * WAYPOINTS.length));
+                }, 3000);
+                return () => clearInterval(interval);
+            }, []);
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" onClick={onClose}>
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+                    >
+                        <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-800/50">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                Room {roomNumber} の生活
+                            </h3>
+                            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-8 bg-slate-950 relative h-[400px] w-full overflow-hidden flex items-center justify-center">
+                            <div className="relative w-[400px] h-[300px] border-4 border-slate-800 rounded-xl bg-slate-900/50 shadow-inner">
+                                <div className="absolute top-0 left-0 w-[50%] h-[50%] border-r-2 border-b-2 border-slate-800/80 bg-slate-800/20 flex flex-col items-center justify-center gap-2">
+                                    <BedDouble className="w-8 h-8 text-slate-600" />
+                                    <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">Bedroom</span>
+                                </div>
+                                <div className="absolute top-0 right-0 w-[50%] h-[50%] border-b-2 border-slate-800/80 bg-slate-800/20 flex flex-col items-center justify-center gap-2">
+                                    <Utensils className="w-8 h-8 text-slate-600" />
+                                    <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">Kitchen</span>
+                                </div>
+                                <div className="absolute bottom-0 left-0 w-[60%] h-[50%] border-r-2 border-slate-800/80 bg-slate-800/20 flex flex-col items-center justify-center gap-2">
+                                    <Tv className="w-8 h-8 text-slate-600" />
+                                    <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">Living</span>
+                                </div>
+                                <div className="absolute bottom-0 right-0 w-[40%] h-[50%] bg-slate-800/20 flex flex-col items-center justify-center gap-2">
+                                    <Bath className="w-8 h-8 text-slate-600" />
+                                    <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">Bath</span>
+                                </div>
+                                <div className="absolute -bottom-4 right-8 w-16 h-4 border-x-2 border-b-2 border-slate-800 bg-slate-900 flex items-center justify-center text-[8px] text-slate-500 font-bold uppercase">
+                                    Entrance
+                                </div>
+                                <motion.div
+                                    className="absolute w-8 h-8 bg-blue-500 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.8)] flex items-center justify-center z-10"
+                                    animate={{ 
+                                        left: `calc(${WAYPOINTS[posIndex].x}% - 16px)`, 
+                                        top: `calc(${WAYPOINTS[posIndex].y}% - 16px)` 
+                                    }}
+                                    transition={{ duration: 2, ease: "easeInOut" }}
+                                >
+                                    <div className="w-4 h-4 bg-blue-200 rounded-full" />
+                                </motion.div>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            );
+        }
+
+        function VisualView({ rooms, residents, onRoomClick }) {
+            const roomsPerFloor = 4;
+            const floors = Math.ceil(rooms / roomsPerFloor);
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-end min-h-[600px] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-950 rounded-2xl border border-slate-800 overflow-hidden relative p-8 shadow-inner">
+                    <div className="absolute top-10 left-10 text-slate-700"><Moon className="w-16 h-16" /></div>
+                    <div className="absolute top-20 right-20 text-slate-800/50"><Cloud className="w-24 h-24" /></div>
+                    <div className="absolute top-40 left-1/4 text-slate-800/30"><Cloud className="w-16 h-16" /></div>
+
+                    <div className="relative z-10 flex flex-col items-center mt-12">
+                        <div className="w-[105%] h-6 bg-slate-700 rounded-t-lg border-b-4 border-slate-900 shadow-xl" />
+                        <div className="bg-slate-800 p-4 border-x-4 border-slate-700 shadow-2xl flex flex-col-reverse gap-4">
+                            {Array.from({ length: floors }).map((_, floorIndex) => (
+                                <div key={floorIndex} className="flex gap-4 border-b-4 border-slate-900/50 pb-4">
+                                    {Array.from({ length: roomsPerFloor }).map((_, roomOffset) => {
+                                        const roomIndex = floorIndex * roomsPerFloor + roomOffset;
+                                        if (roomIndex >= rooms) return null;
+                                        const isOccupied = roomIndex < residents;
+                                        const roomNumber = (floorIndex + 1) * 100 + (roomOffset + 1);
+                                        return (
+                                            <motion.button
+                                                key={roomIndex}
+                                                whileHover={{ scale: 1.05 }}
+                                                whileTap={{ scale: 0.95 }}
+                                                onClick={() => isOccupied && onRoomClick(roomIndex)}
+                                                className={`relative w-16 h-24 sm:w-20 sm:h-28 rounded-md border-2 transition-all duration-500 overflow-hidden group ${isOccupied ? 'bg-yellow-100/90 border-yellow-400/50 shadow-[0_0_20px_rgba(253,224,71,0.2)] cursor-pointer' : 'bg-slate-900 border-slate-950 cursor-default'}`}
+                                            >
+                                                <div className="absolute inset-0 border-4 border-slate-700/50 pointer-events-none" />
+                                                <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-700/50 pointer-events-none" />
+                                                <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-slate-700/50 pointer-events-none" />
+                                                <div className={`absolute bottom-1 right-1 text-[9px] sm:text-[10px] font-mono font-bold px-1 rounded z-20 ${isOccupied ? 'bg-yellow-900/50 text-yellow-100' : 'bg-slate-800 text-slate-600'}`}>{roomNumber}</div>
+                                                {isOccupied && (
+                                                    <motion.div 
+                                                        className="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-8 sm:w-6 sm:h-10 bg-slate-800/80 rounded-t-full z-10"
+                                                        animate={{ x: ['-50%', '-20%', '-80%', '-50%'] }}
+                                                        transition={{ duration: 10 + Math.random() * 5, repeat: Infinity, ease: "easeInOut" }}
+                                                    />
+                                                )}
+                                                {isOccupied && (
+                                                    <div className="absolute inset-0 bg-blue-500/0 group-hover:bg-blue-500/20 transition-colors flex items-center justify-center z-30">
+                                                        <span className="opacity-0 group-hover:opacity-100 text-[10px] sm:text-xs font-bold text-slate-900 bg-white/90 px-2 py-1 rounded shadow-lg transition-opacity">覗く</span>
+                                                    </div>
+                                                )}
+                                            </motion.button>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="w-[115%] h-8 sm:h-12 bg-slate-900 border-t-4 border-slate-800 flex justify-center items-end px-8">
+                            <div className="w-24 sm:w-32 h-8 sm:h-10 bg-slate-800 rounded-t-lg border-x-2 border-t-2 border-slate-700 flex items-center justify-center">
+                                <div className="w-10 sm:w-12 h-full border-x border-slate-900/50 flex items-center justify-center">
+                                    <div className="w-2 h-2 bg-yellow-500/50 rounded-full" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function App() {
+            const [state, setState] = useState(INITIAL_STATE);
+            const [viewMode, setViewMode] = useState('dashboard');
+            const [selectedRoom, setSelectedRoom] = useState(null);
+            const logsEndRef = useRef(null);
+
+            useEffect(() => {
+                logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, [state.logs]);
+
+            useEffect(() => {
+                if (state.isPaused) return;
+                const tick = setInterval(() => {
+                    setState((prev) => {
+                        const newLogs = [...prev.logs];
+                        const addLog = (text, type = 'info') => {
+                            newLogs.push({ id: generateId(), text, type });
+                            if (newLogs.length > 50) newLogs.shift();
+                        };
+                        const income = prev.residents * prev.rent;
+                        const cleaningCost = CLEANING_COSTS[prev.cleaningLevel];
+                        const maintenanceCost = prev.facilityLevel * MAINTENANCE_COST_PER_LEVEL;
+                        const expenses = cleaningCost + maintenanceCost;
+                        const profit = income - expenses;
+                        let newMoney = prev.money + profit;
+                        let newResidents = prev.residents;
+                        const emptyRooms = prev.rooms - prev.residents;
+                        let moveInCount = 0;
+                        if (emptyRooms > 0) {
+                            for (let i = 0; i < emptyRooms; i++) {
+                                let moveInChance = 0.05 + (prev.facilityLevel * 0.02);
+                                if (prev.cleaningLevel === 'premium') moveInChance += 0.05;
+                                if (prev.adActive) moveInChance += 0.20;
+                                if (Math.random() < moveInChance) moveInCount++;
+                            }
+                        }
+                        let moveOutCount = 0;
+                        if (prev.residents > 0) {
+                            for (let i = 0; i < prev.residents; i++) {
+                                let moveOutChance = 0.02 + (prev.cleaningLevel === 'none' ? 0.10 : 0) - (prev.cleaningLevel === 'premium' ? 0.01 : 0) - (prev.facilityLevel * 0.005);
+                                moveOutChance = Math.max(0, Math.min(1, moveOutChance));
+                                if (Math.random() < moveOutChance) moveOutCount++;
+                            }
+                        }
+                        newResidents += moveInCount - moveOutCount;
+                        if (moveInCount > 0) addLog(`${moveInCount}人の新規入居がありました！`, 'success');
+                        if (moveOutCount > 0) addLog(`${moveOutCount}人が退去しました。`, 'warning');
+                        if (profit !== 0) addLog(`${prev.month}ヶ月目の収支: ${profit > 0 ? '+' : ''}${formatCurrency(profit)}`, profit > 0 ? 'success' : 'error');
+                        if (newMoney < 0 && prev.money >= 0) addLog('資金がマイナスになりました！破産の危機です。', 'error');
+                        return { ...prev, month: prev.month + 1, money: newMoney, residents: newResidents, logs: newLogs, adActive: false };
+                    });
+                }, 2000);
+                return () => clearInterval(tick);
+            }, [state.isPaused]);
+
+            const togglePause = () => setState((s) => ({ ...s, isPaused: !s.isPaused }));
+            const upgradeFacility = () => {
+                const cost = FACILITY_UPGRADE_BASE_COST * state.facilityLevel;
+                if (state.money >= cost) {
+                    setState((s) => ({ ...s, money: s.money - cost, facilityLevel: s.facilityLevel + 1, rent: s.rent + RENT_INCREASE_PER_LEVEL, logs: [...s.logs, { id: generateId(), text: `設備をレベル${s.facilityLevel + 1}にアップグレードしました！`, type: 'success' }] }));
+                } else {
+                    setState((s) => ({ ...s, logs: [...s.logs, { id: generateId(), text: '資金が不足しています。', type: 'error' }] }));
+                }
+            };
+            const runAd = () => {
+                if (state.money >= AD_COST) {
+                    setState((s) => ({ ...s, money: s.money - AD_COST, adActive: true, logs: [...s.logs, { id: generateId(), text: '広告を出稿しました。', type: 'info' }] }));
+                } else {
+                    setState((s) => ({ ...s, logs: [...s.logs, { id: generateId(), text: '広告費が不足しています。', type: 'error' }] }));
+                }
+            };
+            const setCleaning = (level) => setState((s) => ({ ...s, cleaningLevel: level, logs: [...s.logs, { id: generateId(), text: `清掃業者を「${CLEANING_NAMES[level]}」に変更しました。`, type: 'info' }] }));
+
+            const manualMoveIn = () => {
+                if (state.residents < state.rooms) {
+                    setState((s) => ({
+                        ...s,
+                        residents: s.residents + 1,
+                        logs: [...s.logs, { id: generateId(), text: '手動で入居者を1居室増やしました。', type: 'success' }]
+                    }));
+                } else {
+                    setState((s) => ({
+                        ...s,
+                        logs: [...s.logs, { id: generateId(), text: '満室のため入居できません。', type: 'error' }]
+                    }));
+                }
+            };
+
+            const currentIncome = state.residents * state.rent;
+            const currentExpenses = CLEANING_COSTS[state.cleaningLevel] + (state.facilityLevel * MAINTENANCE_COST_PER_LEVEL);
+            const currentProfit = currentIncome - currentExpenses;
+            const occupancyRate = Math.round((state.residents / state.rooms) * 100);
+            const upgradeCost = FACILITY_UPGRADE_BASE_COST * state.facilityLevel;
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    <header className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-600 rounded-lg"><Building className="w-6 h-6 text-white" /></div>
+                            <div>
+                                <h1 className="text-xl font-bold text-white tracking-tight">Mansion Tycoon</h1>
+                                <p className="text-xs text-slate-400">マンション経営シミュレーション</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+                                <button onClick={() => setViewMode('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>
+                                    <LayoutDashboard className="w-4 h-4" /><span className="hidden sm:inline">ダッシュボード</span>
+                                </button>
+                                <button onClick={() => setViewMode('visual')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'visual' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>
+                                    <Eye className="w-4 h-4" /><span className="hidden sm:inline">ビジュアル</span>
+                                </button>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm text-slate-400 font-medium">経過月数</p>
+                                <p className="text-2xl font-mono font-bold text-blue-400">{state.month} <span className="text-base text-slate-500">ヶ月</span></p>
+                            </div>
+                            <button onClick={togglePause} className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all ${state.isPaused ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}>
+                                {state.isPaused ? <><Play className="w-5 h-5 fill-current" /><span>経営再開</span></> : <><Pause className="w-5 h-5 fill-current" /><span>一時停止</span></>}
+                            </button>
+                        </div>
+                    </header>
+
+                    <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full flex-1">
+                        {viewMode === 'dashboard' ? (
+                            <div className="lg:col-span-8 space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10"><DollarSign className="w-16 h-16" /></div>
+                                        <p className="text-sm text-slate-400 font-medium mb-1">総資金</p>
+                                        <p className={`text-3xl font-mono font-bold tracking-tight ${state.money < 0 ? 'text-red-400' : 'text-white'}`}>{formatCurrency(state.money)}</p>
+                                    </div>
+                                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp className="w-16 h-16" /></div>
+                                        <p className="text-sm text-slate-400 font-medium mb-1">月間利益見込み</p>
+                                        <p className={`text-3xl font-mono font-bold tracking-tight ${currentProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{currentProfit >= 0 ? '+' : ''}{formatCurrency(currentProfit)}</p>
+                                    </div>
+                                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10"><Users className="w-16 h-16" /></div>
+                                        <p className="text-sm text-slate-400 font-medium mb-1">入居率</p>
+                                        <div className="flex items-baseline gap-2">
+                                            <p className="text-3xl font-mono font-bold tracking-tight text-blue-400">{occupancyRate}%</p>
+                                            <p className="text-sm text-slate-500">({state.residents}/{state.rooms}室)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg">
+                                    <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-6"><Building className="w-5 h-5 text-blue-400" />物件ステータス</h2>
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                                        {Array.from({ length: state.rooms }).map((_, i) => (
+                                            <motion.div key={i} layout className={`aspect-square rounded-xl flex flex-col items-center justify-center gap-2 border-2 ${i < state.residents ? 'bg-blue-500/10 border-blue-500/50 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-700'}`}>
+                                                <Users className={`w-8 h-8 ${i < state.residents ? 'opacity-100' : 'opacity-20'}`} />
+                                                <span className="text-xs font-mono font-bold opacity-50">{101 + i}</span>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="lg:col-span-8 flex flex-col">
+                                <VisualView rooms={state.rooms} residents={state.residents} onRoomClick={(index) => setSelectedRoom(index)} />
+                            </div>
+                        )}
+
+                        <div className="lg:col-span-4 space-y-6 flex flex-col h-[calc(100vh-8rem)]">
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg shrink-0">
+                                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Wrench className="w-5 h-5 text-blue-400" />経営アクション</h2>
+                                <div className="space-y-4">
+                                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div><h3 className="font-bold text-slate-200">設備投資 (Lv.{state.facilityLevel})</h3></div>
+                                            <span className="text-sm font-mono font-bold text-slate-300">{formatCurrency(upgradeCost)}</span>
+                                        </div>
+                                        <button onClick={upgradeFacility} disabled={state.money < upgradeCost || !state.isPaused} className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"><Wrench className="w-4 h-4" />アップグレード</button>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div><h3 className="font-bold text-slate-200">入居者募集広告</h3></div>
+                                            <span className="text-sm font-mono font-bold text-slate-300">{formatCurrency(AD_COST)}</span>
+                                        </div>
+                                        <button onClick={runAd} disabled={state.money < AD_COST || state.adActive || !state.isPaused} className="w-full py-2.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"><Megaphone className="w-4 h-4" />広告を出す</button>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                                        <h3 className="font-bold text-slate-200 mb-3">入居管理</h3>
+                                        <button 
+                                            onClick={manualMoveIn} 
+                                            disabled={state.residents >= state.rooms || !state.isPaused}
+                                            className="w-full py-2.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Users className="w-4 h-4" />
+                                            入居者を1人増やす
+                                        </button>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+                                        <h3 className="font-bold text-slate-200 mb-3">清掃業者設定</h3>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {Object.keys(CLEANING_COSTS).map((level) => (
+                                                <button key={level} onClick={() => setCleaning(level)} disabled={!state.isPaused} className={`py-2 px-1 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1 ${state.cleaningLevel === level ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50'}`}>
+                                                    <Sparkles className="w-4 h-4" />{CLEANING_NAMES[level]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-0 shadow-lg flex-1 flex flex-col overflow-hidden min-h-[200px]">
+                                <div className="p-4 border-b border-slate-800 bg-slate-900/50 shrink-0"><h2 className="text-sm font-bold text-slate-300 flex items-center gap-2"><Info className="w-4 h-4" />経営ログ</h2></div>
+                                <div className="p-4 overflow-y-auto flex-1 space-y-3 font-mono text-sm custom-scrollbar">
+                                    <AnimatePresence initial={false}>
+                                        {state.logs.map((log) => (
+                                            <motion.div key={log.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className={`p-3 rounded-lg border-l-2 ${log.type === 'info' ? 'bg-slate-800/50 border-blue-500 text-slate-300' : ''} ${log.type === 'success' ? 'bg-emerald-950/30 border-emerald-500 text-emerald-300' : ''} ${log.type === 'warning' ? 'bg-amber-950/30 border-amber-500 text-amber-300' : ''} ${log.type === 'error' ? 'bg-red-950/30 border-red-500 text-red-300' : ''}`}>
+                                                {log.text}
+                                            </motion.div>
+                                        ))}
+                                    </AnimatePresence>
+                                    <div ref={logsEndRef} />
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    <AnimatePresence>
+                        {selectedRoom !== null && (
+                            <RoomModal roomNumber={Math.floor(selectedRoom / 4 + 1) * 100 + (selectedRoom % 4 + 1)} onClose={() => setSelectedRoom(null)} />
+                        )}
+                    </AnimatePresence>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
