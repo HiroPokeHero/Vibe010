@@ -304,11 +304,6 @@
             const [state, setState] = useState(INITIAL_STATE);
             const [viewMode, setViewMode] = useState('dashboard');
             const [selectedRoom, setSelectedRoom] = useState(null);
-            const logsEndRef = useRef(null);
-
-            useEffect(() => {
-                logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, [state.logs]);
 
             useEffect(() => {
                 if (state.isPaused) return;
@@ -473,20 +468,20 @@
                                             <div><h3 className="font-bold text-slate-200">設備投資 (Lv.{state.facilityLevel})</h3></div>
                                             <span className="text-sm font-mono font-bold text-slate-300">{formatCurrency(upgradeCost)}</span>
                                         </div>
-                                        <button onClick={upgradeFacility} disabled={state.money < upgradeCost || !state.isPaused} className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"><Wrench className="w-4 h-4" />アップグレード</button>
+                                        <button onClick={upgradeFacility} disabled={state.money < upgradeCost} className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"><Wrench className="w-4 h-4" />アップグレード</button>
                                     </div>
                                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                                         <div className="flex justify-between items-start mb-3">
                                             <div><h3 className="font-bold text-slate-200">入居者募集広告</h3></div>
                                             <span className="text-sm font-mono font-bold text-slate-300">{formatCurrency(AD_COST)}</span>
                                         </div>
-                                        <button onClick={runAd} disabled={state.money < AD_COST || state.adActive || !state.isPaused} className="w-full py-2.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"><Megaphone className="w-4 h-4" />広告を出す</button>
+                                        <button onClick={runAd} disabled={state.money < AD_COST || state.adActive} className="w-full py-2.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"><Megaphone className="w-4 h-4" />広告を出す</button>
                                     </div>
                                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                                         <h3 className="font-bold text-slate-200 mb-3">入居管理</h3>
                                         <button 
                                             onClick={manualMoveIn} 
-                                            disabled={state.residents >= state.rooms || !state.isPaused}
+                                            disabled={state.residents >= state.rooms}
                                             className="w-full py-2.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 disabled:opacity-50 text-sm font-medium transition-colors flex items-center justify-center gap-2"
                                         >
                                             <Users className="w-4 h-4" />
@@ -497,7 +492,7 @@
                                         <h3 className="font-bold text-slate-200 mb-3">清掃業者設定</h3>
                                         <div className="grid grid-cols-3 gap-2">
                                             {Object.keys(CLEANING_COSTS).map((level) => (
-                                                <button key={level} onClick={() => setCleaning(level)} disabled={!state.isPaused} className={`py-2 px-1 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1 ${state.cleaningLevel === level ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50'}`}>
+                                                <button key={level} onClick={() => setCleaning(level)} className={`py-2 px-1 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1 ${state.cleaningLevel === level ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50'}`}>
                                                     <Sparkles className="w-4 h-4" />{CLEANING_NAMES[level]}
                                                 </button>
                                             ))}
@@ -515,7 +510,6 @@
                                             </motion.div>
                                         ))}
                                     </AnimatePresence>
-                                    <div ref={logsEndRef} />
                                 </div>
                             </div>
                         </div>
