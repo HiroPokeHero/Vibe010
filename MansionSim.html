@@ -116,6 +116,8 @@
         const Bath = getIcon('Bath');
         const Cloud = getIcon('Cloud');
         const Moon = getIcon('Moon');
+        const Save = getIcon('Save');
+        const FolderOpen = getIcon('FolderOpen');
 
         // Framer Motion detection
         const Framer = getGlobal(['Motion', 'FramerMotion', 'framerMotion']);
@@ -305,6 +307,46 @@
             const [viewMode, setViewMode] = useState('dashboard');
             const [selectedRoom, setSelectedRoom] = useState(null);
 
+            const handleSave = () => {
+                const fileName = "マンションアプリ保存.json";
+                const dataStr = JSON.stringify(state, null, 2);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            };
+
+            const handleLoad = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const loadedState = JSON.parse(e.target.result);
+                        if(confirm('セーブデータを読み込みますか？現在の進行状況は失われます。')) {
+                            // 古いデータには存在しない新しい変数を初期値で補填
+                            // ★注意点: ロード時は安全のため isPaused: true で一時停止状態から再開させる
+                            setState({
+                                ...INITIAL_STATE,
+                                ...loadedState,
+                                isPaused: true 
+                            });
+                        }
+                    } catch (error) {
+                        alert("ファイルの読み込みに失敗しました。正しいセーブデータか確認してください。");
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = ''; // 次回も同じファイルを選択できるようにリセット
+            };
+            
             useEffect(() => {
                 if (state.isPaused) return;
                 const tick = setInterval(() => {
@@ -408,6 +450,17 @@
                                     <Eye className="w-4 h-4" /><span className="hidden sm:inline">ビジュアル</span>
                                 </button>
                             </div>
+                            
+                            <div className="flex items-center gap-2 border-r border-slate-700 pr-6 hidden sm:flex">
+                                <button onClick={handleSave} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-bold rounded-lg border border-slate-700 transition-colors">
+                                    <Save className="w-4 h-4" /> セーブ
+                                </button>
+                                <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-bold rounded-lg border border-slate-700 transition-colors cursor-pointer">
+                                    <FolderOpen className="w-4 h-4" /> ロード
+                                    <input type="file" accept=".json" onChange={handleLoad} className="hidden" />
+                                </label>
+                            </div>
+                            
                             <div className="text-right">
                                 <p className="text-sm text-slate-400 font-medium">経過月数</p>
                                 <p className="text-2xl font-mono font-bold text-blue-400">{state.month} <span className="text-base text-slate-500">ヶ月</span></p>
